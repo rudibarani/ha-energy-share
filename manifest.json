@@ -1,0 +1,10 @@
+{
+  "domain": "ha-energy-share",
+  "name": "HA energy share",
+  "version": "0.2.0",
+  "documentation": "https://github.com/rudibarani/ha-energy-share",
+  "requirements": [],
+  "dependencies": [],
+  "codeowners": ["@rudibarani"],
+  "config_flow": true
+}
