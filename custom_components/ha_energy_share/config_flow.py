@@ -5,7 +5,9 @@ from homeassistant.helpers import selector
 from .const import DOMAIN
 
 
-class EnergyShareConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
+@config_entries.HANDLERS.register(DOMAIN)
+class EnergyShareConfigFlow(config_entries.ConfigFlow):
+    VERSION = 1
 
     def __init__(self):
         self.data = {
@@ -69,9 +71,12 @@ class EnergyShareConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self.data["current_source"] = keys[idx + 1]
                     return await self.async_step_children()
                 else:
+                    self.data.pop("current_source")
                     return await self.async_step_consumers()
 
-            self.data["sources"][current]["children"][user_input["name"]] = user_input["sensor"]
+            if user_input.get("name") and user_input.get("sensor"):
+                self.data["sources"][current]["children"][user_input["name"]] = user_input["sensor"]
+
             return await self.async_step_children()
 
         return self.async_show_form(
@@ -134,37 +139,5 @@ class EnergyShareConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 ),
                 vol.Optional("deadband", default=50): int
-            })
-        )
-
-
-class OptionsFlowHandler(config_entries.OptionsFlow):
-
-    def __init__(self, config_entry):
-        self.data = dict(config_entry.data)
-
-    async def async_step_init(self, user_input=None):
-        if user_input is not None:
-            self.data["priority"] = user_input["priority"]
-            self.data["deadband"] = user_input["deadband"]
-
-            return self.async_create_entry(title="", data=self.data)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema({
-                vol.Required(
-                    "priority",
-                    default=self.data.get("priority")
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=list(self.data["sources"].keys()),
-                        multiple=True
-                    )
-                ),
-                vol.Optional(
-                    "deadband",
-                    default=self.data.get("deadband", 50)
-                ): int
             })
         )
