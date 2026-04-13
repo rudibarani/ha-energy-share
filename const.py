@@ -1,4 +1,4 @@
-DOMAIN = "ha-energy-share"
+DOMAIN = "ha_energy_share"
 
 CONF_SOURCES = "sources"
 CONF_LOAD = "load"
