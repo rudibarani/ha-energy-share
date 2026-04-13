@@ -1,12 +1,13 @@
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+
 from .const import DOMAIN
-from .coordinator import PVSplitCoordinator
+from .coordinator import EnergyShareCoordinator
 
 PLATFORMS = ["sensor"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry):
-    coordinator = PVSplitCoordinator(hass, entry)
+    coordinator = EnergyShareCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})
