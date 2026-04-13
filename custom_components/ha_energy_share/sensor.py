@@ -1,4 +1,5 @@
 from homeassistant.components.sensor import SensorEntity
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
@@ -24,9 +25,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
     async_add_entities(entities)
 
 
-class BaseSensor(SensorEntity):
+class BaseSensor(CoordinatorEntity, SensorEntity):
     def __init__(self, coordinator, consumer, source):
-        self.coordinator = coordinator
+        super().__init__(coordinator)
         self.consumer = consumer
         self.source = source
 
