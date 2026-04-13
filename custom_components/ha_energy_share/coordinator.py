@@ -8,7 +8,6 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
         self.hass = hass
         self.entry = entry
-        self.data = {}
         self.energy = {}
 
         super().__init__(
@@ -20,7 +19,8 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
 
     def _get(self, entity_id):
         try:
-            return float(self.hass.states.get(entity_id).state)
+            state = self.hass.states.get(entity_id)
+            return float(state.state) if state and state.state not in ["unknown", "unavailable"] else 0.0
         except:
             return 0.0
 
@@ -61,7 +61,7 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
                 child_distribution[parent] = {parent: val}
                 continue
 
-            total_child_power = sum([self._get(e) for e in children.values()])
+            total_child_power = sum(self._get(e) for e in children.values())
             child_distribution[parent] = {}
 
             for child_name, entity in children.items():
@@ -87,8 +87,6 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
                     key = f"{parent}_{child}"
                     result[consumer][key] = val * factor
 
-        self.data = result
-
         dt = UPDATE_INTERVAL / 3600
 
         for consumer in result:
@@ -97,4 +95,4 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
                 self.energy.setdefault(key, 0)
                 self.energy[key] += result[consumer][src] * dt / 1000
 
-        return self.data
+        return result
