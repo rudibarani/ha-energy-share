@@ -1,5 +1,5 @@
 {
-  "domain": "ha-energy-share",
+  "domain": "ha_energy_share",
   "name": "HA energy share",
   "version": "0.2.0",
   "documentation": "https://github.com/rudibarani/ha-energy-share",
