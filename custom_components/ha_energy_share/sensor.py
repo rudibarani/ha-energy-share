@@ -1,7 +1,6 @@
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity import DeviceInfo
-
 from .const import DOMAIN
 
 
@@ -9,18 +8,39 @@ async def async_setup_entry(hass, entry, async_add_entities):
     coordinator = hass.data[DOMAIN][entry.entry_id]
     entities = []
 
-    for consumer in entry.data["consumers"]:
-        for parent in entry.data["sources"]:
-            children = entry.data["sources"][parent].get("children", {})
+    consumers = entry.data["consumers"]
+    sources = entry.data["sources"]
+
+    # Einzelverbraucher
+    for group, gdata in consumers.items():
+        for name in gdata["children"]:
+            consumer_key = f"{group}_{name}"
+
+            for parent in sources:
+                children = sources[parent]["children"]
+
+                if children:
+                    for child in children:
+                        src_key = f"{parent}_{child}"
+                        entities.append(PowerSensor(coordinator, consumer_key, src_key))
+                        entities.append(EnergySensor(coordinator, consumer_key, src_key))
+                else:
+                    entities.append(PowerSensor(coordinator, consumer_key, parent))
+                    entities.append(EnergySensor(coordinator, consumer_key, parent))
+
+    # Gruppensummen
+    for group in consumers:
+        for parent in sources:
+            children = sources[parent]["children"]
 
             if children:
                 for child in children:
-                    key = f"{parent}_{child}"
-                    entities.append(PowerSensor(coordinator, consumer, key))
-                    entities.append(EnergySensor(coordinator, consumer, key))
+                    src_key = f"{parent}_{child}"
+                    entities.append(PowerSensor(coordinator, group, src_key))
+                    entities.append(EnergySensor(coordinator, group, src_key))
             else:
-                entities.append(PowerSensor(coordinator, consumer, parent))
-                entities.append(EnergySensor(coordinator, consumer, parent))
+                entities.append(PowerSensor(coordinator, group, parent))
+                entities.append(EnergySensor(coordinator, group, parent))
 
     async_add_entities(entities)
 
@@ -43,7 +63,7 @@ class BaseSensor(CoordinatorEntity, SensorEntity):
 class PowerSensor(BaseSensor):
     def __init__(self, coordinator, consumer, source):
         super().__init__(coordinator, consumer, source)
-        self._attr_name = f"{consumer} {source.replace('_', ' ')} Power"
+        self._attr_name = f"{consumer} {source} Power"
         self._attr_unit_of_measurement = "W"
 
     @property
@@ -54,7 +74,7 @@ class PowerSensor(BaseSensor):
 class EnergySensor(BaseSensor):
     def __init__(self, coordinator, consumer, source):
         super().__init__(coordinator, consumer, source)
-        self._attr_name = f"{consumer} {source.replace('_', ' ')} Energy"
+        self._attr_name = f"{consumer} {source} Energy"
         self._attr_unit_of_measurement = "kWh"
         self._attr_device_class = "energy"
         self._attr_state_class = "total_increasing"
