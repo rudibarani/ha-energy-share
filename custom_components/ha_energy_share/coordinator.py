@@ -1,8 +1,6 @@
 from datetime import timedelta
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
 from .const import *
-
 
 class EnergyShareCoordinator(DataUpdateCoordinator):
     def __init__(self, hass, entry):
@@ -26,21 +24,30 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
 
     async def _async_update_data(self):
         cfg = self.entry.data
-        sources = cfg[CONF_SOURCES]
         load = self._get(cfg[CONF_LOAD])
         deadband = cfg.get(CONF_DEADBAND, DEFAULT_DEADBAND)
 
         if load < deadband:
             load = 0
 
+        # -----------------------------------
+        # 1. Quellen summieren (Parent-Level)
+        # -----------------------------------
+        parent_power = {}
+        for group, gdata in cfg[CONF_SOURCES].items():
+            total = 0
+            for entity in gdata["children"].values():
+                total += self._get(entity)
+            parent_power[group] = total
+
+        # -----------------------------------
+        # 2. Verteilung (Priorität)
+        # -----------------------------------
         remaining = load
         parent_distribution = {}
 
         for src in cfg[CONF_PRIORITY]:
-            if src not in sources:
-                continue
-
-            power = self._get(sources[src]["sensor"])
+            power = parent_power.get(src, 0)
 
             if src == "battery" and power < 0:
                 power = 0
@@ -52,41 +59,66 @@ class EnergyShareCoordinator(DataUpdateCoordinator):
         if remaining > 0:
             parent_distribution["grid"] = parent_distribution.get("grid", 0) + remaining
 
+        # -----------------------------------
+        # 3. Child-Aufteilung
+        # -----------------------------------
         child_distribution = {}
 
         for parent, val in parent_distribution.items():
-            children = sources.get(parent, {}).get("children", {})
+            children = cfg[CONF_SOURCES].get(parent, {}).get("children", {})
 
             if not children:
                 child_distribution[parent] = {parent: val}
                 continue
 
-            total_child_power = sum(self._get(e) for e in children.values())
+            total = sum(self._get(e) for e in children.values())
             child_distribution[parent] = {}
 
-            for child_name, entity in children.items():
+            for name, entity in children.items():
                 p = self._get(entity)
-                ratio = (p / total_child_power) if total_child_power > 0 else 0
-                child_distribution[parent][child_name] = val * ratio
+                ratio = (p / total) if total > 0 else 0
+                child_distribution[parent][name] = val * ratio
 
+        # -----------------------------------
+        # 4. Verbraucher-Verteilung
+        # -----------------------------------
         result = {}
 
-        for consumer, cdata in cfg[CONF_CONSUMERS].items():
-            c_power = self._get(cdata["entity"])
-            factor = (c_power / load) if load > 0 else 0
+        for group, gdata in cfg[CONF_CONSUMERS].items():
+            for name, cdata in gdata["children"].items():
 
-            result[consumer] = {}
+                power = self._get(cdata["entity"])
+                factor = (power / load) if load > 0 else 0
 
-            for parent, children in child_distribution.items():
-                allowed = cdata.get("allowed_sources", {}).get(parent, "all")
+                key_consumer = f"{group}_{name}"
+                result[key_consumer] = {}
 
-                for child, val in children.items():
-                    if allowed != "all" and child not in allowed:
-                        continue
+                for parent, children in child_distribution.items():
+                    for child, val in children.items():
+                        key = f"{parent}_{child}"
+                        result[key_consumer][key] = val * factor
 
-                    key = f"{parent}_{child}"
-                    result[consumer][key] = val * factor
+        # -----------------------------------
+        # 5. Gruppensummen bilden
+        # -----------------------------------
+        group_totals = {}
 
+        for group, gdata in cfg[CONF_CONSUMERS].items():
+            group_totals[group] = {}
+
+            for name in gdata["children"]:
+                consumer_key = f"{group}_{name}"
+
+                for src, val in result.get(consumer_key, {}).items():
+                    group_totals[group].setdefault(src, 0)
+                    group_totals[group][src] += val
+
+        # zusammenführen
+        result.update(group_totals)
+
+        # -----------------------------------
+        # 6. Energieintegration
+        # -----------------------------------
         dt = UPDATE_INTERVAL / 3600
 
         for consumer in result:
